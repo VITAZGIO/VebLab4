@@ -1,145 +1,68 @@
- Flask REST API (Lab 3)
- 
- Описание
+# Лабораторная работа №4
 
-Это REST API на Flask с авторизацией через JWT, cookies и PostgreSQL.
-Реализованы:
+## Тема
 
-регистрация и логин пользователей
-защита маршрутов через middleware
-работа с задачами (CRUD)
-хэширование паролей
-refresh/access токены
-soft delete
- Технологии
-Python 3.12
-Flask
-SQLAlchemy
-Alembic (Flask-Migrate)
-PostgreSQL
-Docker / Docker Compose
-JWT (PyJWT)
+Автоматизированное документирование REST API с использованием OpenAPI / Swagger.
 
- Запуск проекта
-1. Очистка (если нужно)
-docker-compose down -v
-2. Запуск
-docker-compose up --build
-3. Миграции
-docker exec -it <container_name> flask db upgrade
-4. Проверка
-http://localhost:4200
- Авторизация
+## Описание проекта
 
-Используется:
+Проект является продолжением лабораторной работы №3.
 
-JWT (access + refresh)
-cookies
- API Endpoints
- Регистрация
- 
-## Авторизация через Yandex ID
+В приложении реализованы:
 
-В проекте реализована авторизация через внешний OAuth2-провайдер **Yandex ID**.  
-Используется поток **Authorization Code Grant**.
+- REST API на Flask;
+- PostgreSQL;
+- Docker / Docker Compose;
+- регистрация и вход пользователей;
+- JWT access / refresh tokens;
+- хранение токенов в HttpOnly cookies;
+- refresh токены;
+- logout и logout-all;
+- OAuth авторизация через Yandex ID;
+- защищенный CRUD задач;
+- soft delete задач;
+- автоматическая Swagger/OpenAPI документация.
 
-### Настройка приложения в Yandex OAuth
+В лабораторной работе №4 добавлена автоматическая документация API через Swagger UI.
 
-Для работы входа через Яндекс необходимо создать приложение в кабинете Yandex ID OAuth:
+Документация доступна только в режиме разработки.
 
-1. Перейти в консоль Yandex OAuth.
-2. Создать приложение типа **«Для авторизации пользователей»**.
-3. В качестве платформы выбрать **«Веб-сервисы»**.
-4. Указать Redirect URI:
+## Стек
 
-```text
-http://localhost:4200/auth/oauth/yandex/callback
+- Python 3.12
+- Flask
+- Flask-SQLAlchemy
+- Flask-Migrate
+- PostgreSQL 16
+- PyJWT
+- Requests
+- Flasgger
+- Docker
+- Docker Compose
 
-POST
+## Переменные окружения
 
-/auth/register
-{
-  "email": "test@mail.com",
-  "password": "12345678"
-}
- Логин
+Пример `.env.example`:
 
-POST
+```env
+FLASK_APP=run.py
+FLASK_ENV=development
+APP_ENV=development
+SWAGGER_ENABLED=true
 
-/auth/login
+DB_HOST=postgres
+DB_PORT=5432
+DB_NAME=wp_labs
+DB_USER=student
+DB_PASSWORD=your_password
 
- сохраняет cookies:
+PORT=4200
 
-access_token
-refresh_token
- Кто я
+JWT_ACCESS_SECRET=change_me_access_secret
+JWT_REFRESH_SECRET=change_me_refresh_secret
+JWT_ACCESS_EXPIRATION=15m
+JWT_REFRESH_EXPIRATION=7d
 
-GET
-
-/auth/whoami
- Logout
-
-POST
-
-/auth/logout
- Задачи
- Создать задачу
-
-POST
-
-/tasks
-{
-  "title": "Task 1",
-  "description": "Demo",
-  "status": "new"
-}
- Получить список задач
-
-GET
-
-/tasks?page=1&limit=10
- Удалить задачу
-
-DELETE
-
-/tasks/{task_id}
-
- soft delete
-
- Безопасность
-Хэширование
-
-Пароли не хранятся в открытом виде:
-
-используется salt
-SHA-256
-JWT
-access token — короткий (15 мин)
-refresh token — длинный (7 дней)
-Middleware
-
-Проверяет:
-
-наличие access_token в cookies
-валидность JWT
-существование пользователя
- Особенности
-soft delete через deleted_at
-пагинация задач
-разделение логики:
-routes
-services
-models
- Тестирование (Postman)
-
-Порядок:
-
-/auth/register
-
-/auth/login
-
-/auth/whoami
-
-/tasks
-
-/tasks?page=1&limit=10
+YANDEX_CLIENT_ID=your_yandex_client_id
+YANDEX_CLIENT_SECRET=your_yandex_client_secret
+YANDEX_CALLBACK_URL=http://localhost:4200/auth/oauth/yandex/callback

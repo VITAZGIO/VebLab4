@@ -2,18 +2,47 @@ import os
 import secrets
 from urllib.parse import urlencode
 
-from flask import Blueprint, request, jsonify, make_response, g, redirect
+from flask import Blueprint, g, jsonify, make_response, redirect, request
 
-from app.services.auth_service import AuthService
-from app.utils.cookie_utils import set_auth_cookies, clear_auth_cookies
 from app.middleware.auth_middleware import auth_required
-
+from app.services.auth_service import AuthService
+from app.utils.cookie_utils import clear_auth_cookies, set_auth_cookies
 
 auth_bp = Blueprint("auth", __name__)
 
 
 @auth_bp.route("/auth/register", methods=["POST"])
 def register():
+    """
+    Регистрация нового пользователя.
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/RegisterRequest'
+    responses:
+      201:
+        description: Пользователь успешно зарегистрирован
+        schema:
+          $ref: '#/definitions/UserResponse'
+        examples:
+          application/json:
+            id: "3c7a2a41-7d7b-4fd5-8a7d-f3e03a9d98a1"
+            email: "test@mail.com"
+      400:
+        description: Ошибка валидации или пользователь уже существует
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+        examples:
+          application/json:
+            message: "Email and password are required"
+    """
     data = request.get_json(silent=True)
 
     if not data:
@@ -27,14 +56,50 @@ def register():
     except ValueError as error:
         return jsonify({"message": str(error)}), 400
 
-    return jsonify({
-        "id": user.id,
-        "email": user.email
-    }), 201
+    return jsonify(
+        {
+            "id": user.id,
+            "email": user.email,
+        }
+    ), 201
 
 
 @auth_bp.route("/auth/login", methods=["POST"])
 def login():
+    """
+    Вход пользователя и установка HttpOnly cookies.
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/LoginRequest'
+    responses:
+      200:
+        description: Успешный вход. Access и Refresh токены установлены в HttpOnly cookies.
+        examples:
+          application/json:
+            message: "Logged in"
+      400:
+        description: Не передан JSON или обязательные поля
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+        examples:
+          application/json:
+            message: "Email and password are required"
+      401:
+        description: Неверный email или пароль
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+        examples:
+          application/json:
+            message: "Invalid credentials"
+    """
     data = request.get_json(silent=True)
 
     if not data:
@@ -58,6 +123,30 @@ def login():
 
 @auth_bp.route("/auth/refresh", methods=["POST"])
 def refresh():
+    """
+    Обновление пары Access/Refresh токенов.
+    ---
+    tags:
+      - Auth
+    security:
+      - refreshCookieAuth: []
+    responses:
+      200:
+        description: Токены успешно обновлены
+        examples:
+          application/json:
+            message: "Tokens refreshed"
+            user:
+              id: "3c7a2a41-7d7b-4fd5-8a7d-f3e03a9d98a1"
+              email: "test@mail.com"
+      401:
+        description: Refresh token отсутствует или недействителен
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+        examples:
+          application/json:
+            message: "Invalid refresh token"
+    """
     refresh_token = request.cookies.get("refresh_token")
 
     if not refresh_token:
@@ -70,14 +159,17 @@ def refresh():
 
     user, access_token, new_refresh_token = result
 
-    response = make_response(jsonify({
-        "message": "Tokens refreshed",
-        "user": {
-            "id": user.id,
-            "email": user.email
-        }
-    }))
-
+    response = make_response(
+        jsonify(
+            {
+                "message": "Tokens refreshed",
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                },
+            }
+        )
+    )
     set_auth_cookies(response, access_token, new_refresh_token)
 
     return response, 200
@@ -86,18 +178,66 @@ def refresh():
 @auth_bp.route("/auth/whoami", methods=["GET"])
 @auth_required
 def whoami():
+    """
+    Проверка текущего авторизованного пользователя.
+    ---
+    tags:
+      - Auth
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: Данные текущего пользователя без чувствительных полей
+        schema:
+          $ref: '#/definitions/UserResponse'
+        examples:
+          application/json:
+            id: "3c7a2a41-7d7b-4fd5-8a7d-f3e03a9d98a1"
+            email: "test@mail.com"
+            yandex_id: "123456789"
+      401:
+        description: Пользователь не авторизован
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+        examples:
+          application/json:
+            message: "Unauthorized"
+    """
     user = g.current_user
 
-    return jsonify({
-        "id": user.id,
-        "email": user.email,
-        "yandex_id": user.yandex_id
-    }), 200
+    return jsonify(
+        {
+            "id": user.id,
+            "email": user.email,
+            "yandex_id": user.yandex_id,
+        }
+    ), 200
 
 
 @auth_bp.route("/auth/logout", methods=["POST"])
 @auth_required
 def logout():
+    """
+    Выход из текущей сессии.
+    ---
+    tags:
+      - Auth
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: Текущая сессия завершена, cookies очищены
+        examples:
+          application/json:
+            message: "Logged out"
+      401:
+        description: Пользователь не авторизован
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+        examples:
+          application/json:
+            message: "Unauthorized"
+    """
     access_token = request.cookies.get("access_token")
     refresh_token = request.cookies.get("refresh_token")
 
@@ -112,6 +252,27 @@ def logout():
 @auth_bp.route("/auth/logout-all", methods=["POST"])
 @auth_required
 def logout_all():
+    """
+    Выход из всех сессий пользователя.
+    ---
+    tags:
+      - Auth
+    security:
+      - cookieAuth: []
+    responses:
+      200:
+        description: Все сессии пользователя завершены, cookies очищены
+        examples:
+          application/json:
+            message: "Logged out from all sessions"
+      401:
+        description: Пользователь не авторизован
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+        examples:
+          application/json:
+            message: "Unauthorized"
+    """
     user = g.current_user
 
     AuthService.logout_all(user.id)
@@ -124,6 +285,22 @@ def logout_all():
 
 @auth_bp.route("/auth/oauth/yandex", methods=["GET"])
 def yandex_oauth_start():
+    """
+    Начало OAuth авторизации через Yandex ID.
+    ---
+    tags:
+      - Auth
+    responses:
+      302:
+        description: Редирект пользователя на страницу авторизации Yandex OAuth
+      500:
+        description: OAuth Yandex не настроен
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+        examples:
+          application/json:
+            message: "Yandex OAuth is not configured"
+    """
     client_id = os.getenv("YANDEX_CLIENT_ID")
     redirect_uri = os.getenv("YANDEX_CALLBACK_URL")
 
@@ -136,7 +313,7 @@ def yandex_oauth_start():
         "response_type": "code",
         "client_id": client_id,
         "redirect_uri": redirect_uri,
-        "state": state
+        "state": state,
     }
 
     yandex_url = "https://oauth.yandex.ru/authorize?" + urlencode(params)
@@ -147,7 +324,7 @@ def yandex_oauth_start():
         state,
         httponly=True,
         samesite="Lax",
-        max_age=300
+        max_age=300,
     )
 
     return response
@@ -155,6 +332,40 @@ def yandex_oauth_start():
 
 @auth_bp.route("/auth/oauth/yandex/callback", methods=["GET"])
 def yandex_oauth_callback():
+    """
+    Callback OAuth Yandex после авторизации пользователя.
+    ---
+    tags:
+      - Auth
+    parameters:
+      - in: query
+        name: code
+        required: true
+        type: string
+        description: Authorization code от Yandex OAuth
+      - in: query
+        name: state
+        required: true
+        type: string
+        description: CSRF state, который должен совпасть с cookie oauth_state
+    responses:
+      302:
+        description: Успешная авторизация, установка cookies и редирект на /auth/whoami
+      400:
+        description: Отсутствует code или неверный state
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+        examples:
+          application/json:
+            message: "Invalid OAuth state"
+      401:
+        description: Ошибка авторизации через Yandex
+        schema:
+          $ref: '#/definitions/ErrorResponse'
+        examples:
+          application/json:
+            message: "Yandex OAuth failed"
+    """
     code = request.args.get("code")
     state = request.args.get("state")
     saved_state = request.cookies.get("oauth_state")
